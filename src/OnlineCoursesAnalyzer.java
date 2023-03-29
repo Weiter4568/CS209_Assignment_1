@@ -3,6 +3,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  *
@@ -52,27 +54,117 @@ public class OnlineCoursesAnalyzer {
             int participants = course.participants;
             ptcpCountByInst.put(institution, ptcpCountByInst.getOrDefault(institution, 0) + participants);
         }
-        return ptcpCountByInst;
+        List<Map.Entry<String, Integer>> list = new ArrayList<>(ptcpCountByInst.entrySet());
+        Collections.sort(list, Map.Entry.comparingByKey());
+        Map<String, Integer> fiPtcpCountByInst = new LinkedHashMap<>();
+        for(Map.Entry<String, Integer> entry : list){
+            fiPtcpCountByInst.put(entry.getKey(), entry.getValue());
+        }
+        return fiPtcpCountByInst;
     }
 
     //2
     public Map<String, Integer> getPtcpCountByInstAndSubject() {
-        return null;
+        Map<String, Integer> ptcpCountByInstAndSubject = new HashMap<>();
+        for(Course course : courses){
+            String str = course.institution + "-" + course.subject;
+            int participants = course.participants;
+            ptcpCountByInstAndSubject.put(str, ptcpCountByInstAndSubject.getOrDefault(str, 0) + participants);
+        }
+        List<Map.Entry<String, Integer>> entries = new ArrayList<>(ptcpCountByInstAndSubject.entrySet());
+        Collections.sort(entries, Map.Entry.<String, Integer>comparingByValue().reversed());
+        Map<String, Integer> sortedPtcpCountByInstAndSubject = new LinkedHashMap<>();
+        for(Map.Entry<String, Integer> entry : entries){
+            sortedPtcpCountByInstAndSubject.put(entry.getKey(), entry.getValue());
+        }
+        return sortedPtcpCountByInstAndSubject;
     }
 
     //3
     public Map<String, List<List<String>>> getCourseListOfInstructor() {
-        return null;
+        Map <String, List<String>> indepentCourses = new HashMap<>();
+        Map <String, List<String>> coDevelopCourses = new HashMap<>();
+        Set <String> allInstructors = new HashSet<>();
+        for(Course course : courses){
+            String[] instructors = course.instructors.split(", ");
+            for(String instructor : instructors){
+                allInstructors.add(instructor);
+                indepentCourses.putIfAbsent(instructor, new ArrayList<String>());
+                coDevelopCourses.putIfAbsent(instructor, new ArrayList<String>());
+                if(instructors.length == 1){
+                    if(!indepentCourses.get(instructor).contains(course.title))
+                        indepentCourses.get(instructor).add(course.title);
+                } else{
+                    if(!coDevelopCourses.get(instructor).contains(course.title))
+                        coDevelopCourses.get(instructor).add(course.title);
+                }
+            }
+        }
+        for(Map.Entry<String, List<String>> entry : indepentCourses.entrySet()){
+            Collections.sort(entry.getValue());
+        }
+        for(Map.Entry<String, List<String>> entry : coDevelopCourses.entrySet()){
+            Collections.sort(entry.getValue());
+        }
+        Map <String, List<List<String>> > courseList = new LinkedHashMap<>();
+        for(String instructor : allInstructors){
+            List<List<String>> coursesOfInstructor = new ArrayList<>();
+            coursesOfInstructor.add(indepentCourses.get(instructor));
+            coursesOfInstructor.add(coDevelopCourses.get(instructor));
+            courseList.put(instructor, coursesOfInstructor);
+        }
+//        for(Map.Entry<String, List<List<String>>> entry : courseList.entrySet()){
+//            System.out.printf(entry.getKey() + " == " + entry.getValue().toString() + "\n");
+//        }
+        return courseList;
     }
 
     //4
     public List<String> getCourses(int topK, String by) {
+        List<String> courseList = new ArrayList<>();
+        switch (by) {
+            case "hours":
+                Map<String, Double> hour = new HashMap<>();
+                for(Course course : courses){
+                    if(hour.get(course.title) == null || hour.get(course.title) < course.totalHours){
+                        hour.put(course.title, course.totalHours);
+                    }
+                }
+                List<Map.Entry<String, Double>> list = new ArrayList<>(hour.entrySet());
+                Collections.sort(list, Map.Entry.<String, Double>comparingByValue().reversed());
+                for(int i = 1; i <= topK; i++){
+                    courseList.add(list.get(i - 1).getKey());
+//                    System.out.printf(courseList.get(i - 1) + " " + list.get(i - 1).getValue() + "\n");
+                }
+                return courseList;
+            case "participants":
+                Map<String, Integer> participant = new HashMap<>();
+                for(Course course : courses){
+                    if(participant.get(course.title) == null || participant.get(course.title) < course.participants)
+                        participant.put(course.title, course.participants);
+                }
+                List<Map.Entry<String, Integer>> list1 = new ArrayList<>(participant.entrySet());
+                Collections.sort(list1, Map.Entry.<String, Integer>comparingByValue().reversed());
+                for(int i = 1; i <= topK; i++){
+                    courseList.add(list1.get(i - 1).getKey());
+//                    System.out.printf(courseList.get(i - 1) + " " + list1.get(i - 1).getValue() + "\n");
+                }
+                return courseList;
+        }
         return null;
     }
 
     //5
     public List<String> searchCourses(String courseSubject, double percentAudited, double totalCourseHours) {
-        return null;
+        return courses.stream()
+                .filter(course -> Arrays.stream(course.subject.replace(" ", "").split(',' + "|" + Pattern.quote("and"))).anyMatch(s -> s.toLowerCase().contains(courseSubject.replace(" ", "").toLowerCase())))
+                .filter(course -> course.percentAudited >= percentAudited)
+                .filter(course -> course.totalHours <= totalCourseHours)
+                .sorted(Comparator.comparing(Course::getTitle))
+                .map(Course::getTitle)
+                .distinct()
+                .collect(Collectors.toList());
+
     }
 
     //6
@@ -146,4 +238,5 @@ class Course {
         this.percentFemale = percentFemale;
         this.percentDegree = percentDegree;
     }
+    public String getTitle(){return this.title;}
 }
