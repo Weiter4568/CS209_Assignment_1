@@ -169,7 +169,48 @@ public class OnlineCoursesAnalyzer {
 
     //6
     public List<String> recommendCourses(int age, int gender, int isBachelorOrHigher) {
-        return null;
+        Map<String, List<Double>> courseCharacteristics = courses.stream()
+                .collect(Collectors.groupingBy(
+                        Course::getNumber,
+                        Collectors.mapping(course -> new Double[] {
+                                course.getMedianAge(),
+                                course.getPercentMale(),
+                                course.getPercentDegree()
+                        }, Collectors.toList())
+                ))
+                .entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream().reduce((arr1, arr2) ->
+                        new Double[]{
+                                arr1[0] + arr2[0],
+                                arr1[1] + arr2[1],
+                                arr1[2] + arr2[2]
+                        })
+                        .map(arr -> Arrays.asList(
+                                arr[0] / entry.getValue().size(),
+                                arr[1] / entry.getValue().size(),
+                                arr[2] / entry.getValue().size()
+                        ))
+                        .orElse(Collections.emptyList())));
+
+        List<String> recommendCourse = courses.stream()
+                .collect(Collectors.groupingBy(Course::getNumber))
+                .entrySet().stream()
+                .map(stringListEntry -> {
+                    Course course = stringListEntry.getValue().stream()
+                            .max(Comparator.comparing(Course::getLaunchDate))
+                            .orElseThrow(NoSuchElementException::new);
+                    List<Double> courseInfo = courseCharacteristics.getOrDefault(course.getNumber(), Collections.emptyList());
+                    Double similarity = Math.pow(age - courseInfo.get(0), 2)
+                            + Math.pow(gender * 100 - courseInfo.get(1), 2)
+                            + Math.pow(isBachelorOrHigher * 100 - courseInfo.get(2), 2);
+                    return new AbstractMap.SimpleEntry<>(course.getTitle(), similarity);
+                })
+                .sorted(Comparator.comparing((Map.Entry<String, Double> e) -> e.getValue()).thenComparing((Map.Entry<String, Double> e) -> e.getKey()))
+                .map(Map.Entry::getKey)
+                .distinct()
+                .limit(10)
+                .collect(Collectors.toList());
+        return recommendCourse;
     }
 
 }
@@ -239,4 +280,9 @@ class Course {
         this.percentDegree = percentDegree;
     }
     public String getTitle(){return this.title;}
+    public String getNumber(){return  this.number;}
+    public double getMedianAge(){return this.medianAge;}
+    public double getPercentMale(){return this.percentMale;}
+    public double getPercentDegree(){return this.percentDegree;}
+    public Date getLaunchDate(){return this.launchDate;}
 }
